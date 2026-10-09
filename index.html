@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meine Finanzen</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:#f5f6f7;color:#242424;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input,select{font:inherit}
+button{border:0;border-radius:10px;padding:11px 15px;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}
+.wrap{max-width:1050px;margin:auto;padding:22px}
+.auth{max-width:440px;margin:8vh auto;background:#fff;padding:25px;border-radius:18px;box-shadow:0 5px 24px #0000000c}
+h1{margin:0;font-size:25px}h2{font-size:18px;margin:0 0 14px}
+.sub,.muted,.hint{color:#777}.sub{margin:7px 0 20px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.card,section,.panel{background:#fff;border-radius:16px}
+.card{padding:17px;min-width:0}.label{font-size:13px;color:#777}.value{font-size:clamp(19px,3vw,25px);font-weight:700;margin-top:8px;overflow-wrap:anywhere}
+.green{color:#16834a}.red{color:#c43d3d}
+.topbar,.sectionhead{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.topbar{margin-bottom:20px}.user{font-size:13px;color:#777;text-align:right;margin-bottom:7px}
+.tabs{display:flex;gap:8px;margin:22px 0}.tabs button{background:#e9eaec}.tabs button.active,.primary{background:#242424;color:#fff}.secondary{background:#eceef0;color:#222}
+section{padding:18px;margin-bottom:17px}.panel{overflow-x:auto}
+form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+label{display:block;font-size:13px;color:#555}
+input,select{display:block;width:100%;min-width:0;padding:12px;margin-top:6px;border:1px solid #d9dce0;border-radius:10px;background:#fff;color:#222}
+.full{grid-column:1/-1}.actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:6px}
+.hint{font-size:12px;line-height:1.45;margin-top:6px}
+.status{padding:10px 12px;border-radius:10px;background:#f0f1f2;font-size:13px;margin:12px 0}
+.error{color:#a51d2d}.success{color:#167344}
+.balance-edit{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
+.balance-edit button{white-space:nowrap}
+table{width:100%;border-collapse:collapse;min-width:520px}
+th,td{text-align:left;padding:12px 9px;border-bottom:1px solid #eee;font-size:14px}
+th{font-size:12px;color:#777}
+.badge{display:inline-block;background:#eee;border-radius:999px;padding:4px 8px;font-size:12px}
+.empty{text-align:center;color:#777;padding:30px 14px}
+.month-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:17px}.transactions-scroll{max-height:62vh;overflow:auto;border-radius:10px}.transactions-scroll table{margin:0}.editButton{padding:7px 10px;background:#eceef0;color:#222}.receiptAnalyze{margin-top:8px}.ocrStatus{margin-top:8px}.month-nav select{margin:0;flex:1;min-width:180px}.month-nav button{background:#eceef0}.receipt-picker{border:1px solid #eef0f2;border-radius:12px;padding:10px;margin-top:6px}.receipt-picker>#receipt{display:none}.deleteButton{padding:7px 10px;background:#f7dede;color:#9f2525}.receiptButton{padding:7px 10px}
+.chart{display:flex;align-items:flex-end;gap:12px;min-height:205px;padding:18px 8px 4px}
+.barbox{flex:1;min-width:0;text-align:center;display:flex;flex-direction:column;justify-content:flex-end;height:180px}
+.bar{width:min(100%,54px);margin:0 auto;background:#858b91;border-radius:7px 7px 2px 2px;height:var(--h)}
+.barname{font-size:11px;color:#666;margin-top:7px;overflow-wrap:anywhere}.barval{font-size:11px;color:#555;margin-bottom:5px}
+.modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;padding:16px;z-index:5}
+.modal.open{display:flex}.modalbox{position:relative;background:#fff;border-radius:16px;padding:18px;max-width:850px;max-height:90vh;width:100%;overflow:auto}
+.modalbox img,.modalbox iframe{display:block;width:100%;max-height:72vh;object-fit:contain;border:0}
+.close{float:right;background:#222;color:#fff;border-radius:50%;padding:6px 11px}
+@media(max-width:650px){.wrap{padding:15px}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.card{padding:14px}form{grid-template-columns:1fr}.full{grid-column:auto}.topbar{align-items:flex-start}.chart{gap:5px}.barname{font-size:10px}.balance-edit{grid-template-columns:1fr}.balance-edit button{width:100%}}
+</style>
+</head>
+<body>
+<div id="authView" class="auth">
+  <h1>Meine Finanzen</h1>
+  <div class="sub">Deine Buchungen auf iPhone und iPad synchronisieren.</div>
+  <div id="authStatus" class="status">Bitte anmelden oder ein Konto erstellen.</div>
+  <form id="authForm" style="grid-template-columns:1fr">
+    <div><label for="email">E-Mail</label><input id="email" type="email" autocomplete="email" required></div>
+    <div><label for="password">Passwort</label><input id="password" type="password" autocomplete="current-password" minlength="6" required></div>
+    <div class="actions"><button type="button" class="secondary" id="signupBtn">Konto erstellen</button><button type="submit" class="primary">Anmelden</button></div>
+  </form>
+</div>
+
+<div id="appView" class="wrap" style="display:none">
+  <div class="topbar">
+    <div><h1>Meine Finanzen</h1><div class="sub" id="monthTitle"></div></div>
+    <div><div class="user" id="userEmail"></div><button class="secondary" id="logoutBtn">Abmelden</button></div>
+  </div>
+
+  <section>
+    <div class="sectionhead"><h2>Dein Start-Kontostand</h2></div>
+    <div class="balance-edit">
+      <div><label for="openingBalance">Kontostand, bevor du Buchungen in der App erfasst (€)</label><input id="openingBalance" type="number" step="0.01" inputmode="decimal" placeholder="z. B. 1250,00"></div>
+      <button class="primary" id="saveBalanceBtn" type="button">Kontostand speichern</button>
+    </div>
+    <div class="hint">Diesen Betrag trägst du einmal ein. Danach werden deine gespeicherten Einnahmen addiert und deine Ausgaben abgezogen. Der Start-Kontostand wird mit deinem Konto synchronisiert.</div>
+    <div id="balanceStatus" class="hint" role="status" aria-live="polite"></div>
+  </section>
+
+  <div class="grid">
+    <div class="card"><div class="label">Aktueller Kontostand</div><div class="value" id="balance">0,00 €</div></div>
+    <div class="card"><div class="label">Einnahmen gesamt</div><div class="value green" id="income">0,00 €</div></div>
+    <div class="card"><div class="label">Ausgaben gesamt</div><div class="value red" id="expenses">0,00 €</div></div>
+    <div class="card"><div class="label">Veränderung durch Buchungen</div><div class="value" id="remaining">0,00 €</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="active" data-tab="overview" type="button">Übersicht</button>
+    <button data-tab="add" type="button">+ Buchung</button>
+  </div>
+
+  <div id="overview">
+    <section>
+      <div class="sectionhead"><h2 id="monthOverviewTitle">Monatsübersicht</h2></div>
+      <div class="month-nav">
+        <button id="prevMonthBtn" type="button" aria-label="Vorheriger Monat">‹</button>
+        <select id="monthSelect" aria-label="Monat auswählen"></select>
+        <button id="nextMonthBtn" type="button" aria-label="Nächster Monat">›</button>
+      </div>
+      <div class="hint">Der Kontostand vom Ende des Vormonats wird automatisch als Übertrag übernommen. So kannst du jederzeit zwischen allen Monaten wechseln.</div>
+    </section>
+    <section>
+      <div class="sectionhead"><h2>Ausgaben nach Kategorie</h2></div>
+      <div class="panel"><div class="chart" id="chart"></div>
+    </section>
+    <section>
+      <div class="sectionhead"><h2 id="transactionsTitle">Buchungen</h2><button class="secondary" id="clearBtn" type="button">Alle löschen</button></div>
+      <div id="transactions" class="panel transactions-scroll"></div>
+    </section>
+  </div>
+
+  <div id="add" style="display:none">
+    <section>
+      <h2>Buchung hinzufügen</h2>
+      <form id="transactionForm">
+        <div><label for="type">Art</label><select id="type"><option value="expense">Ausgabe</option><option value="income">Einnahme</option></select></div>
+        <div><label for="date">Datum</label><input id="date" type="date" required></div>
+        <div><label for="amount">Betrag (€)</label><input id="amount" type="number" step="0.01" min="0.01" inputmode="decimal" placeholder="0,00" required></div>
+        <div><label for="category">Kategorie</label><select id="category"></select></div>
+        <div class="full"><label for="merchant">Händler / Beschreibung (optional)</label><input id="merchant" placeholder="z. B. Lidl, Miete, Gehalt"></div>
+        <div class="full"><label for="receipt">Beleg / Kassenzettel (optional)</label>
+          <div class="receipt-picker">
+            <input id="receipt" type="file" accept="image/*,application/pdf">
+            <input id="receiptCamera" type="file" accept="image/*" capture="environment" hidden>
+            <div class="actions" style="justify-content:flex-start">
+              <button type="button" class="secondary" id="chooseReceiptBtn">Foto / Dokument auswählen</button>
+              <button type="button" class="secondary" id="cameraReceiptBtn">Kamera öffnen</button>
+              <button type="button" class="secondary receiptAnalyze" id="analyzeReceiptBtn">Beleg automatisch auslesen</button>
+            </div>
+            <div id="selectedReceiptName" class="hint" role="status" aria-live="polite"></div>
+            <div id="ocrStatus" class="hint ocrStatus" role="status" aria-live="polite"></div>
+            <div class="hint">Du kannst einen bereits vorhandenen Beleg aus deiner Fotomediathek oder Dateien-App auswählen oder direkt ein neues Foto aufnehmen. Bilder können automatisch ausgelesen werden; PDFs können als Beleg gespeichert werden. Hinweis: Belege werden aktuell nur auf diesem Gerät gespeichert und nicht zwischen Geräten synchronisiert.</div>
+          </div>
+        </div>
+        <div class="full"><div id="formStatus" class="hint" role="status" aria-live="polite"></div><div class="actions"><button type="submit" class="primary" id="saveTransactionBtn">Buchung speichern</button></div></div>
+      </form>
+    </section>
+  </div>
+</div>
+
+<div class="modal" id="editModal"><div class="modalbox"><button class="close" id="closeEdit" type="button">×</button><h2>Buchung bearbeiten</h2><form id="editForm"><div><label for="editType">Art</label><select id="editType"><option value="expense">Ausgabe</option><option value="income">Einnahme</option></select></div><div><label for="editDate">Datum</label><input id="editDate" type="date" required></div><div><label for="editAmount">Betrag (€)</label><input id="editAmount" type="number" step="0.01" min="0.01" required></div><div><label for="editCategory">Kategorie</label><select id="editCategory"></select></div><div class="full"><label for="editMerchant">Händler / Beschreibung</label><input id="editMerchant"></div><div class="full"><label for="editReceipt">Beleg nachträglich hochladen (optional)</label><div class="receipt-picker"><input id="editReceipt" type="file" accept="image/*,application/pdf"><input id="editReceiptCamera" type="file" accept="image/*" capture="environment" hidden><div class="actions" style="justify-content:flex-start"><button type="button" class="secondary" id="chooseEditReceiptBtn">Foto / Dokument auswählen</button><button type="button" class="secondary" id="cameraEditReceiptBtn">Kamera öffnen</button><button type="button" class="secondary" id="removeEditReceiptBtn">Beleg entfernen</button></div><div id="editReceiptName" class="hint" role="status" aria-live="polite"></div></div></div><div class="full"><div id="editStatus" class="hint"></div><div class="actions"><button type="button" class="secondary" id="cancelEdit">Abbrechen</button><button type="submit" class="primary" id="saveEditBtn">Änderungen speichern</button></div></div></form></div></div>
+
+<div class="modal" id="receiptModal"><div class="modalbox"><button class="close" id="closeReceipt" type="button">×</button><div id="receiptViewer"></div></div></div>
+
+<script>
+const SUPABASE_URL = "https://oanrtnicmhfyuogwtwyz.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_gSNAbNZG4nFdjdrH11P2lg_wguZmG7y";
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const categories = ["Wohnen","Lebensmittel","Essen gehen","Mobilität","Shopping","Freizeit","Abos","Studium","Gesundheit","Drogerie","Sonstiges"];
+let transactions = [];
+let currentUser = null;
+let openingBalance = 0;
+let starting = false;
+const euro = value => new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"}).format(Number(value)||0);
+const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+let selectedMonth = today().slice(0,7);
+const $ = id => document.getElementById(id);
+const DB_NAME = "MeineFinanzenDB_v2";
+const dbReady = new Promise((resolve,reject)=>{
+  const request=indexedDB.open(DB_NAME,1);
+  request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains("receipts"))request.result.createObjectStore("receipts");};
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error);
+});
+async function saveReceipt(id,file){const db=await dbReady;return new Promise((resolve,reject)=>{const tx=db.transaction("receipts","readwrite");tx.objectStore("receipts").put(file,id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});}
+async function getReceipt(id){const db=await dbReady;return new Promise((resolve,reject)=>{const tx=db.transaction("receipts","readonly");const req=tx.objectStore("receipts").get(id);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error);});}
+async function deleteReceipt(id){const db=await dbReady;return new Promise(resolve=>{const tx=db.transaction("receipts","readwrite");tx.objectStore("receipts").delete(id);tx.oncomplete=resolve;tx.onerror=resolve;});}
+function message(id,text,kind=""){const el=$(id);el.textContent=text;el.className=kind;}
+function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function localCache(){try{return JSON.parse(localStorage.getItem("financeData")||"[]");}catch{return [];}}
+function saveLocalCache(){localStorage.setItem("financeData",JSON.stringify(transactions));}
+function switchTab(tab){$("overview").style.display=tab==="overview"?"block":"none";$("add").style.display=tab==="add"?"block":"none";document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));}
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+$("monthSelect").addEventListener("change",e=>{selectedMonth=e.target.value;render();});
+$("prevMonthBtn").addEventListener("click",()=>{
+  const months=availableMonths(),i=months.indexOf(selectedMonth);
+  if(i<months.length-1){selectedMonth=months[i+1];render();}
+});
+$("nextMonthBtn").addEventListener("click",()=>{
+  const months=availableMonths(),i=months.indexOf(selectedMonth);
+  if(i>0){selectedMonth=months[i-1];render();}
+});
+$("category").innerHTML=categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+$("date").value=today();
+$("monthTitle").textContent="Deine persönliche Finanzübersicht";
+
+async function signUp(){
+  const email=$("email").value.trim(),password=$("password").value;
+  if(!email||password.length<6){message("authStatus","Bitte E-Mail und ein Passwort mit mindestens 6 Zeichen eingeben.","error");return;}
+  message("authStatus","Konto wird erstellt …");
+  const {data,error}=await client.auth.signUp({email,password});
+  if(error){message("authStatus",error.message,"error");return;}
+  message("authStatus",data.session?"Konto erstellt – du wirst angemeldet.":"Konto erstellt. Bitte prüfe dein E-Mail-Postfach und bestätige deine Adresse. Danach kannst du dich anmelden.","success");
+}
+async function signIn(){
+  message("authStatus","Anmeldung läuft …");
+  const {error}=await client.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});
+  if(error)message("authStatus",error.message,"error");
+}
+$("authForm").addEventListener("submit",e=>{e.preventDefault();signIn();});
+$("signupBtn").addEventListener("click",signUp);
+$("logoutBtn").addEventListener("click",async()=>{await client.auth.signOut();});
+$("saveBalanceBtn").addEventListener("click",saveOpeningBalance);
+
+function localToDb(item){return {id:item.id,user_id:currentUser.id,type:item.type,amount:Number(item.amount),category:item.category,description:item.merchant||"",date:item.date,receipt_url:null};}
+function dbToLocal(row){return {id:row.id,type:row.type,amount:Number(row.amount),category:row.category||"Sonstiges",merchant:row.description||"",date:row.date,receipt:!!row.receipt_url,receiptName:""};}
+
+async function loadTransactions(){
+  const {data:rows,error}=await client.from("transactions").select("*").order("date",{ascending:false});
+  if(error)throw new Error("Buchungen konnten nicht geladen werden: "+error.message);
+  const local=localCache();
+  if((rows||[]).length===0 && local.length>0){
+    const migrate=confirm(`Auf diesem Gerät liegen noch ${local.length} ältere Buchung(en). Möchtest du sie in dein Konto übernehmen?`);
+    if(migrate){
+      const valid=local.filter(x=>x.type==="income"||x.type==="expense").map(localToDb);
+      if(valid.length){
+        const {error:migrationError}=await client.from("transactions").upsert(valid);
+        if(migrationError)throw new Error("Die alten Buchungen konnten nicht übernommen werden: "+migrationError.message);
+      }
+    }
+  }
+  const {data:all,error:reloadError}=await client.from("transactions").select("*").order("date",{ascending:false});
+  if(reloadError)throw new Error("Buchungen konnten nicht aktualisiert werden: "+reloadError.message);
+  transactions=(all||[]).map(dbToLocal);
+  // Belege liegen lokal in IndexedDB. Beim erneuten Laden wird deshalb geprüft,
+  // ob für eine Buchung tatsächlich noch ein Beleg auf diesem Gerät vorhanden ist.
+  await Promise.all(transactions.map(async item=>{
+    const file=await getReceipt(item.id);
+    if(file){item.receipt=true;item.receiptName=file.name||"";}
+  }));
+  saveLocalCache();
+}
+function monthLabel(month){
+  const [year,mon]=month.split("-").map(Number);
+  return new Date(year,mon-1,1).toLocaleDateString("de-DE",{month:"long",year:"numeric"});
+}
+
+function monthKey(date){return String(date).slice(0,7);}
+
+function availableMonths(){
+  const set=new Set([selectedMonth, today().slice(0,7)]);
+  transactions.forEach(x=>set.add(monthKey(x.date)));
+  const months=[...set].sort((a,b)=>b.localeCompare(a));
+  return months;
+}
+
+function monthlyData(month){
+  const monthTransactions=transactions.filter(x=>monthKey(x.date)===month);
+  const before=transactions.filter(x=>monthKey(x.date)<month);
+  const carry=openingBalance+
+    before.reduce((sum,x)=>sum+(x.type==="income"?x.amount:-x.amount),0);
+  const income=monthTransactions.filter(x=>x.type==="income").reduce((s,x)=>s+x.amount,0);
+  const expenses=monthTransactions.filter(x=>x.type==="expense").reduce((s,x)=>s+x.amount,0);
+  return {monthTransactions,carry,income,expenses,end:carry+income-expenses};
+}
+
+function renderMonthSelector(){
+  const select=$("monthSelect");
+  const months=availableMonths();
+  if(!months.includes(selectedMonth))selectedMonth=months[0]||today().slice(0,7);
+  select.innerHTML=months.map(m=>`<option value="${m}">${escapeHtml(monthLabel(m))}</option>`).join("");
+  select.value=selectedMonth;
+  const index=months.indexOf(selectedMonth);
+  $("prevMonthBtn").disabled=index===months.length-1;
+  $("nextMonthBtn").disabled=index<=0;
+  $("monthOverviewTitle").textContent=`Übersicht ${monthLabel(selectedMonth)}`;
+  $("monthTitle").textContent=monthLabel(selectedMonth);
+}
+
+function render(){
+  renderMonthSelector();
+  const {monthTransactions,carry,income,expenses,end}=monthlyData(selectedMonth);
+
+  $("income").textContent=euro(income);
+  $("expenses").textContent=euro(expenses);
+  $("remaining").textContent=(income-expenses>=0?"+":"")+euro(income-expenses);
+  $("balance").textContent=euro(end);
+  $("openingBalance").value=Number(openingBalance).toFixed(2);
+
+  const totals={};
+  monthTransactions.filter(x=>x.type==="expense").forEach(x=>totals[x.category]=(totals[x.category]||0)+x.amount);
+  const values=Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+  const max=Math.max(1,...values.map(x=>x[1]));
+  $("chart").innerHTML=values.length
+    ? values.map(([name,value])=>`<div class="barbox"><div class="barval">${euro(value)}</div><div class="bar" style="--h:${Math.max(7,value/max*135)}px"></div><div class="barname">${escapeHtml(name)}</div></div>`).join("")
+    : `<div class="empty" style="width:100%">Noch keine Ausgaben in diesem Monat.</div>`;
+
+  $("transactionsTitle").textContent=`Buchungen im ${monthLabel(selectedMonth)}`;
+  const sorted=[...monthTransactions].sort((a,b)=>b.date.localeCompare(a.date));
+  $("transactions").innerHTML=sorted.length
+    ? `<table><thead><tr><th>Datum</th><th>Beschreibung</th><th>Kategorie</th><th>Betrag</th><th>Beleg</th><th></th></tr></thead><tbody>${sorted.map(x=>`<tr>
+        <td>${new Date(x.date+"T12:00:00").toLocaleDateString("de-DE")}</td>
+        <td>${escapeHtml(x.merchant||"—")}</td>
+        <td><span class="badge">${escapeHtml(x.category)}</span></td>
+        <td class="${x.type==="income"?"green":"red"}">${x.type==="income"?"+":"−"}${euro(x.amount)}</td>
+        <td>${x.receipt?`<button class="secondary receiptButton" data-id="${escapeHtml(x.id)}" type="button">Ansehen</button>`:"—"}</td>
+        <td><button class="editButton" data-id="${escapeHtml(x.id)}" type="button">Bearbeiten</button> <button class="deleteButton" data-id="${escapeHtml(x.id)}" type="button" aria-label="Buchung löschen">Löschen</button></td>
+      </tr>`).join("")}</tbody></table>`
+    : `<div class="empty">In diesem Monat gibt es noch keine Buchungen.</div>`;
+
+  document.querySelectorAll(".receiptButton").forEach(b=>b.addEventListener("click",()=>showReceipt(b.dataset.id)));
+  document.querySelectorAll(".deleteButton").forEach(b=>b.addEventListener("click",()=>deleteTransaction(b.dataset.id)));
+  document.querySelectorAll(".editButton").forEach(b=>b.addEventListener("click",()=>openEdit(b.dataset.id)));
+
+  const carryCard=document.querySelector("#balance")?.closest(".card");
+  if(carryCard)carryCard.querySelector(".label").textContent="Kontostand am Monatsende";
+  const firstCard=document.querySelector("#income")?.closest(".card");
+  if(firstCard)firstCard.querySelector(".label").textContent="Einnahmen im Monat";
+  const expenseCard=document.querySelector("#expenses")?.closest(".card");
+  if(expenseCard)expenseCard.querySelector(".label").textContent="Ausgaben im Monat";
+  const remainingCard=document.querySelector("#remaining")?.closest(".card");
+  if(remainingCard)remainingCard.querySelector(".label").textContent="Veränderung im Monat";
+
+  // Der Übertrag wird zusätzlich direkt oberhalb der Buchungen angezeigt.
+  let carryInfo=document.getElementById("carryInfo");
+  if(!carryInfo){
+    carryInfo=document.createElement("div");
+    carryInfo.id="carryInfo";
+    carryInfo.className="status";
+    $("overview").insertBefore(carryInfo,$("overview").children[1]);
+  }
+  carryInfo.innerHTML=`<strong>Übertrag aus dem Vormonat:</strong> ${euro(carry)}`;
+}
+async function saveOpeningBalance(){
+  const raw=$("openingBalance").value;
+  const value=Number(raw);
+  if(raw.trim()===""||!Number.isFinite(value)){message("balanceStatus","Bitte gib einen gültigen Kontostand ein.","error");return;}
+  $("saveBalanceBtn").disabled=true;
+  message("balanceStatus","Kontostand wird synchronisiert …");
+  try{
+    const {data,error}=await client.auth.updateUser({data:{opening_balance:value}});
+    if(error)throw error;
+    openingBalance=Number(data.user.user_metadata?.opening_balance??value);
+    currentUser=data.user;
+    render();
+    message("balanceStatus","Kontostand gespeichert und synchronisiert.","success");
+  }catch(error){message("balanceStatus","Kontostand konnte nicht gespeichert werden: "+error.message,"error");}
+  finally{$("saveBalanceBtn").disabled=false;}
+}
+async function addTransaction(event){
+  event.preventDefault();
+  const amount=Number($("amount").value);
+  if(!Number.isFinite(amount)||amount<=0){message("formStatus","Bitte gib einen Betrag größer als 0 ein.","error");return;}
+  if(!$("date").value){message("formStatus","Bitte wähle ein Datum aus.","error");return;}
+  const file=$("receipt").files[0]||null;
+  const item={id:crypto.randomUUID(),type:$("type").value,date:$("date").value,amount,category:$("category").value,merchant:$("merchant").value.trim(),receipt:!!file,receiptName:file?.name||""};
+  const button=$("saveTransactionBtn");button.disabled=true;message("formStatus","Buchung wird gespeichert …");
+  try{
+    const {error}=await client.from("transactions").insert(localToDb(item));
+    if(error)throw error;
+    transactions.unshift(item);saveLocalCache();
+    if(file){try{await saveReceipt(item.id,file);}catch(receiptError){item.receipt=false;message("formStatus","Buchung gespeichert, aber der Beleg konnte auf diesem Gerät nicht gespeichert werden.","error");}}
+    $("transactionForm").reset();$("receiptCamera").value="";$("selectedReceiptName").textContent="";$("date").value=today();
+    render();switchTab("overview");
+    if(!file||item.receipt)message("formStatus","Buchung erfolgreich gespeichert.","success");
+  }catch(error){message("formStatus","Buchung konnte nicht gespeichert werden: "+(error.message||"Unbekannter Fehler"),"error");}
+  finally{button.disabled=false;}
+}
+$("transactionForm").addEventListener("submit",addTransaction);
+
+async function showReceipt(id){
+  const item=transactions.find(x=>x.id===id);if(!item)return;
+  try{
+    const file=await getReceipt(id);
+    if(!file){alert("Dieser Beleg ist auf diesem Gerät nicht vorhanden. Belege werden derzeit nicht zwischen Geräten synchronisiert.");return;}
+    const url=URL.createObjectURL(file),viewer=$("receiptViewer");viewer.innerHTML="";
+    if(file.type.startsWith("image/")){const img=document.createElement("img");img.src=url;img.alt=item.receiptName||"Beleg";viewer.appendChild(img);}
+    else{const frame=document.createElement("iframe");frame.src=url;frame.style.height="70vh";viewer.appendChild(frame);}
+    $("receiptModal").dataset.url=url;$("receiptModal").classList.add("open");
+  }catch(error){alert("Beleg konnte nicht geöffnet werden: "+error.message);}
+}
+function closeReceipt(){const modal=$("receiptModal");if(modal.dataset.url)URL.revokeObjectURL(modal.dataset.url);modal.dataset.url="";modal.classList.remove("open");$("receiptViewer").innerHTML="";}
+$("closeReceipt").addEventListener("click",closeReceipt);
+$("receiptModal").addEventListener("click",e=>{if(e.target===$("receiptModal"))closeReceipt();});
+
+async function deleteTransaction(id){
+  const item=transactions.find(x=>x.id===id);
+  if(!item)return;
+  const description=item.merchant?` „${item.merchant}“`:"";
+  if(!confirm(`Möchtest du die Buchung${description} über ${euro(item.amount)} wirklich löschen?`))return;
+
+  const {error}=await client.from("transactions").delete().eq("id",id).eq("user_id",currentUser.id);
+  if(error){alert("Löschen fehlgeschlagen: "+error.message);return;}
+
+  await deleteReceipt(id);
+  transactions=transactions.filter(x=>x.id!==id);
+  saveLocalCache();
+  render();
+}
+
+
+let editingId=null;
+let removeExistingReceipt=false;
+function populateEditCategories(){
+  $("editCategory").innerHTML=categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+}
+function openEdit(id){
+  const item=transactions.find(x=>x.id===id); if(!item)return;
+  editingId=id; removeExistingReceipt=false; $("editReceipt").value=""; $("editReceiptCamera").value=""; $("editReceiptName").textContent=item.receipt?(item.receiptName?`Vorhandener Beleg: ${item.receiptName}`:"Es ist ein Beleg hinterlegt."):"Noch kein Beleg hinterlegt."; populateEditCategories();
+  $("editType").value=item.type; $("editDate").value=item.date; $("editAmount").value=Number(item.amount).toFixed(2);
+  $("editCategory").value=item.category; $("editMerchant").value=item.merchant||""; message("editStatus","");
+  $("editModal").classList.add("open");
+}
+function closeEdit(){editingId=null;$("editModal").classList.remove("open");}
+$("chooseEditReceiptBtn").addEventListener("click",()=>$("editReceipt").click());
+$("cameraEditReceiptBtn").addEventListener("click",()=>$("editReceiptCamera").click());
+function useEditReceipt(input){
+  const file=input.files[0]||null;
+  if(!file)return;
+  try{const dt=new DataTransfer();dt.items.add(file);$("editReceipt").files=dt.files;}catch{}
+  removeExistingReceipt=false;
+  $("editReceiptName").textContent=`Ausgewählt: ${file.name}`;
+}
+$("editReceipt").addEventListener("change",()=>useEditReceipt($("editReceipt")));
+$("editReceiptCamera").addEventListener("change",()=>useEditReceipt($("editReceiptCamera")));
+$("removeEditReceiptBtn").addEventListener("click",()=>{removeExistingReceipt=true;$("editReceipt").value="";$("editReceiptCamera").value="";$("editReceiptName").textContent="Der vorhandene Beleg wird beim Speichern entfernt.";});
+$("closeEdit").addEventListener("click",closeEdit); $("cancelEdit").addEventListener("click",closeEdit);
+$("editModal").addEventListener("click",e=>{if(e.target===$("editModal"))closeEdit();});
+$("editForm").addEventListener("submit",async e=>{
+  e.preventDefault(); if(!editingId)return;
+  const amount=Number($("editAmount").value); if(!Number.isFinite(amount)||amount<=0){message("editStatus","Bitte gib einen gültigen Betrag ein.","error");return;}
+  const payload={type:$('editType').value,date:$('editDate').value,amount,category:$('editCategory').value,description:$('editMerchant').value.trim()};
+  const btn=$("saveEditBtn"); btn.disabled=true; message("editStatus","Änderungen werden gespeichert …");
+  try{
+    const {error}=await client.from("transactions").update(payload).eq("id",editingId).eq("user_id",currentUser.id);
+    if(error)throw error;
+    const item=transactions.find(x=>x.id===editingId);
+    const newReceipt=$("editReceipt").files[0]||null;
+    if(newReceipt){await saveReceipt(editingId,newReceipt);item.receipt=true;item.receiptName=newReceipt.name;}
+    else if(removeExistingReceipt){await deleteReceipt(editingId);item.receipt=false;item.receiptName="";}
+    Object.assign(item,{type:payload.type,date:payload.date,amount,category:payload.category,merchant:payload.description});
+    saveLocalCache(); closeEdit(); render();
+  }catch(error){message("editStatus","Änderungen konnten nicht gespeichert werden: "+error.message,"error");}
+  finally{btn.disabled=false;}
+});
+
+function guessCategory(text){
+  const t=text.toLowerCase();
+  if(/dm|rossmann|drogerie|müller/.test(t))return "Drogerie";
+  if(/lidl|aldi|rewe|edeka|kaufland|netto|penny|supermarkt|lebensmittel/.test(t))return "Lebensmittel";
+  if(/restaurant|imbiss|mcdonald|burger|pizza|café|cafe|bistro|lieferando|wolt/.test(t))return "Essen gehen";
+  if(/miete|wohnung|strom|gas|wasser|internet|telekom|vodafone/.test(t))return "Wohnen";
+  if(/bahn|db |bus|ticket|tank|shell|aral|esso|uber/.test(t))return "Mobilität";
+  if(/spotify|netflix|prime|disney|abo/.test(t))return "Abos";
+  if(/uni|hochschule|buch|thalia|studium/.test(t))return "Studium";
+  if(/arzt|apotheke|gesund/.test(t))return "Gesundheit";
+  if(/kino|theater|konzert|freizeit/.test(t))return "Freizeit";
+  if(/h&m|zara|zalando|ikea|shopping/.test(t))return "Shopping";
+  return "Sonstiges";
+}
+function parseReceiptText(text){
+  const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const amountMatches=[];
+  for(const line of lines){
+    const matches=line.match(/(?:€|EUR)?\s*\d{1,4}(?:[.\s]\d{3})*,\d{2}\s*(?:€|EUR)?/gi)||[];
+    for(const m of matches){
+      const n=Number(m.replace(/[^0-9,.-]/g,"").replace(/\./g,"").replace(",","."));
+      if(Number.isFinite(n)&&n>0)amountMatches.push({n,line});
+    }
+  }
+  let amount=null;
+  const totalLine=lines.find(l=>/summe|gesamt|total|zu zahlen|endbetrag|zahlbetrag|betrag/i.test(l));
+  if(totalLine){const ms=totalLine.match(/(?:€|EUR)?\s*\d{1,4}(?:[.\s]\d{3})*,\d{2}\s*(?:€|EUR)?/gi)||[]; if(ms.length){const n=Number(ms[ms.length-1].replace(/[^0-9,.-]/g,"").replace(/\./g,"").replace(",",".")); if(Number.isFinite(n))amount=n;}}
+  if(amount===null&&amountMatches.length)amount=amountMatches[amountMatches.length-1].n;
+  const merchant=lines.slice(0,8).find(l=>/[A-Za-zÄÖÜäöüß]{3,}/.test(l)&&!/^\d/.test(l)&&!/rechnung|kassenbon|quittung|datum|uhrzeit|bon/i.test(l))||"";
+  return {amount,merchant:merchant.slice(0,80),category:guessCategory(text)};
+}
+async function analyzeReceipt(){
+  const file=$("receipt").files[0];
+  if(!file){message("ocrStatus","Bitte zuerst ein Foto des Belegs auswählen.","error");return;}
+  if(!file.type.startsWith("image/")){message("ocrStatus","Die automatische Foto-Auswertung funktioniert derzeit mit Bildern. PDF-Belege kannst du weiterhin manuell anhängen.","error");return;}
+  const btn=$("analyzeReceiptBtn");btn.disabled=true;message("ocrStatus","Beleg wird gelesen … Das kann je nach Foto ein paar Sekunden dauern.");
+  try{
+    const result=await Tesseract.recognize(file,"deu+eng",{logger:m=>{if(m.status==="recognizing text")message("ocrStatus",`Beleg wird gelesen … ${Math.round((m.progress||0)*100)} %`);}});
+    const parsed=parseReceiptText(result.data.text||"");
+    if(parsed.amount!==null)$("amount").value=parsed.amount.toFixed(2);
+    if(parsed.merchant)$("merchant").value=parsed.merchant;
+    $("category").value=parsed.category;
+    if(parsed.amount!==null||parsed.merchant)message("ocrStatus",`Erkannt: ${parsed.merchant||"Händler nicht sicher erkannt"} · ${parsed.amount!==null?euro(parsed.amount):"Betrag nicht sicher erkannt"} · ${parsed.category}. Bitte kurz prüfen.`,"success");
+    else message("ocrStatus","Ich konnte auf dem Foto noch keinen sicheren Betrag erkennen. Bitte Betrag und Händler kurz prüfen/eintragen.","error");
+  }catch(error){message("ocrStatus","Beleg konnte nicht automatisch ausgelesen werden. Bitte die Felder kurz manuell ausfüllen.","error");}
+  finally{btn.disabled=false;}
+}
+$("chooseReceiptBtn").addEventListener("click",()=>$("receipt").click());
+$("cameraReceiptBtn").addEventListener("click",()=>$("receiptCamera").click());
+
+function useSelectedReceipt(input){
+  const file=input.files[0]||null;
+  if(!file)return;
+  // Copy the selected file into the normal receipt input so the existing
+  // save/analyze logic can use both the file picker and the camera.
+  try{
+    const dt=new DataTransfer();
+    dt.items.add(file);
+    $("receipt").files=dt.files;
+  }catch{
+    // Older browsers may not allow assigning FileList. In that case the
+    // camera result is still analyzed directly below, but saving may need
+    // manual selection from the normal picker.
+  }
+  $("selectedReceiptName").textContent=`Ausgewählt: ${file.name}`;
+  if(file.type.startsWith("image/"))analyzeReceipt();
+}
+
+$("receipt").addEventListener("change",()=>useSelectedReceipt($("receipt")));
+$("receiptCamera").addEventListener("change",()=>useSelectedReceipt($("receipt")));
+$("analyzeReceiptBtn").addEventListener("click",analyzeReceipt);
+
+$("clearBtn").addEventListener("click",async()=>{
+  if(!confirm("Möchtest du wirklich alle Buchungen dauerhaft löschen? Dein Start-Kontostand bleibt erhalten."))return;
+  const {error}=await client.from("transactions").delete().eq("user_id",currentUser.id);
+  if(error){alert("Löschen fehlgeschlagen: "+error.message);return;}
+  for(const item of transactions)await deleteReceipt(item.id);
+  transactions=[];saveLocalCache();render();
+});
+
+async function startApp(session){
+  if(starting)return;
+  starting=true;currentUser=session.user;
+  $("authView").style.display="none";$("appView").style.display="block";$("userEmail").textContent=currentUser.email||"";
+  openingBalance=Number(currentUser.user_metadata?.opening_balance)||0;
+  $("openingBalance").value=openingBalance.toFixed(2);
+  message("balanceStatus",openingBalance===0?"Trage oben deinen aktuellen Start-Kontostand ein.":"Dein Start-Kontostand ist geladen.");
+  try{await loadTransactions();render();}
+  catch(error){$("transactions").innerHTML=`<div class="empty error">${escapeHtml(error.message)}</div>`;message("balanceStatus","Daten konnten nicht vollständig geladen werden. Bitte prüfe deine Internetverbindung und die Supabase-Einstellungen.","error");}
+  finally{starting=false;}
+}
+client.auth.onAuthStateChange((event,session)=>{
+  if(session){if(event==="SIGNED_IN"||event==="INITIAL_SESSION"||event==="TOKEN_REFRESHED")setTimeout(()=>startApp(session),0);}
+  else{currentUser=null;transactions=[];$("authView").style.display="block";$("appView").style.display="none";}
+});
+(async()=>{const {data,error}=await client.auth.getSession();if(error){message("authStatus",error.message,"error");return;}if(data.session)await startApp(data.session);})();
+</script>
+</body>
+</html>
